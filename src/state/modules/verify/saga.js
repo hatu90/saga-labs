@@ -9,7 +9,6 @@ import { FACE_RESULTS, FACE_IMAGE } from '../face/actions';
 import { RECORDED } from '../recorder/actions';
 
 import { START_RECORDER_COUNTDOWN, RECORDING_COUNTDOWN } from './actions';
-const STOP = '<AAAAAA></AAAAAA>'
 
 function fetchPassPhrase() {
   return new Promise(resolve => {
@@ -37,23 +36,29 @@ function* verifyRecorder(stream) {
 export default function* verifySaga() {
   let faceTask;
   let recorderTask;
+  const stream = yield call(mediaSaga, { audio: true, video: true });
+  const tracks = stream.getTracks();
+
   try {
-    while (true) {
-      const stream = yield call(mediaSaga, { audio: true, video: true });
-      faceTask = yield fork(faceSaga, stream);
-      yield take(FACE_RESULTS);
-      recorderTask = yield fork(verifyRecorder, stream);
-      const [faceDetectorAction, recorderAction] = yield all([
-        take(FACE_IMAGE),
-        take(RECORDED)
-      ]);
-      const audio = recorderAction.payload;
-      const { face } = faceDetectorAction.payload;
-      yield call(verifyAPI(face, audio));
-      yield take(STOP);
-    }
+
+    faceTask = yield fork(faceSaga, stream);
+    yield take(FACE_RESULTS);
+    recorderTask = yield fork(verifyRecorder, stream);
+    const [faceDetectorAction, recorderAction] = yield all([
+      take(FACE_IMAGE),
+      take(RECORDED)
+    ]);
+    const audio = recorderAction.payload; //blob
+    const { face } = faceDetectorAction.payload; //canvas
+    yield call(verifyAPI(face, audio));
+    tracks.forEach(function (track) {
+      track.stop();
+    });
   } finally {
     yield cancel(faceTask);
     yield cancel(recorderTask);
+    tracks.forEach(function (track) {
+      track.stop();
+    });
   }
 }
